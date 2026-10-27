@@ -7,6 +7,17 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// تفعيل CORS للسماح للواجهة (سواء محلياً أو على Netlify) بالاتصال بالسيرفر بحرية
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
 // مسار الترحيب والفحص
 app.get('/', (req, res) => {
     res.send('Discord Protocol Hub Server is Alive & Running 24/7!');
@@ -17,7 +28,7 @@ app.listen(port, () => {
 });
 
 // آلية الحفاظ على استيقاظ السيرفر تلقائياً كل 10 دقائق
-const RENDER_URL = 'https://discord-hub-px48.onrender.com'; //[cite: 8] رابط سيرفرك
+const RENDER_URL = 'https://discord-hub-px48.onrender.com'; // رابط سيرفرك
 
 setInterval(() => {
     https.get(RENDER_URL, (res) => {
@@ -25,7 +36,7 @@ setInterval(() => {
     }).on('error', (err) => {
         console.error(`Ping error: ${err.message}`);
     });
-}, 10 * 60 * 1000); // 10 دقائق (أقل من الحد الأقصى للنوم وهو 15 دقيقة)
+}, 10 * 60 * 1000);
 
 const activeClients = new Map();
 
