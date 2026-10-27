@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// تفعيل CORS للسماح للواجهة (سواء محلياً أو على Netlify) بالاتصال بالسيرفر بحرية
+// تفعيل CORS للسماح لأي واجهة (سواء محلياً أو على Netlify) بالاتصال بالسيرفر
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -18,7 +18,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// مسار الترحيب والفحص
+// مسار الترحيب والفحص للتأكد من عمل السيرفر
 app.get('/', (req, res) => {
     res.send('Discord Protocol Hub Server is Alive & Running 24/7!');
 });
@@ -27,7 +27,7 @@ app.listen(port, () => {
     console.log(`🌐 Server is running on port ${port}`);
 });
 
-// آلية الحفاظ على استيقاظ السيرفر تلقائياً كل 10 دقائق
+// آلية الحفاظ على استيقاظ السيرفر تلقائياً كل 10 دقائق لمنع النوم على Render
 const RENDER_URL = 'https://discord-hub-px48.onrender.com'; // رابط سيرفرك
 
 setInterval(() => {
@@ -40,7 +40,7 @@ setInterval(() => {
 
 const activeClients = new Map();
 
-// تشغيل الفويس (AFK)
+// بروتوكول تشغيل الاتصال الصوتي (AFK Voice) بالطريقة المباشرة عبر بوابة ديسكورد
 app.post('/api/start-voice', async (req, res) => {
     const { token, guildId, channelId, mute, deaf, video, duration } = req.body;
     if (!token || !guildId || !channelId) {
@@ -55,18 +55,34 @@ app.post('/api/start-voice', async (req, res) => {
             activeClients.set(token, client);
         }
 
-        const guild = await client.guilds.fetch(guildId);
-        const channel = await guild.channels.fetch(channelId);
-        
-        await channel.join({
-            selfMute: mute === 'true',
-            selfDeaf: deaf === 'true',
-            selfVideo: video === 'true'
-        });
+        // إرسال طلب الاتصال الصوتي عبر الـ WebSocket Gateway مباشرة
+        if (client.ws && client.ws.shards) {
+            const shard = client.ws.shards.first();
+            if (shard) {
+                shard.send({
+                    op: 4,
+                    d: {
+                        guild_id: guildId,
+                        channel_id: channelId,
+                        self_mute: mute === 'true',
+                        self_deaf: deaf === 'true',
+                        self_video: video === 'true'
+                    }
+                });
+            }
+        }
 
         if (duration !== 'infinite') {
             setTimeout(async () => {
-                try { await channel.leave(); } catch (e) {}
+                try {
+                    const shard = client.ws.shards.first();
+                    if (shard) {
+                        shard.send({
+                            op: 4,
+                            d: { guild_id: guildId, channel_id: null, self_mute: false, self_deaf: false }
+                        });
+                    }
+                } catch (e) {}
             }, parseInt(duration) * 60 * 1000);
         }
 
@@ -76,7 +92,7 @@ app.post('/api/start-voice', async (req, res) => {
     }
 });
 
-// إرسال الرسائل النصية
+// بروتوكول إرسال الرسائل النصية المتقدمة
 app.post('/api/send-text', async (req, res) => {
     const { token, channelId, content, count, interval } = req.body;
     if (!token || !channelId || !content) {
