@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// تفعيل CORS للسماح لأي واجهة (سواء محلياً أو على Netlify) بالاتصال بالسيرفر
+// تفعيل CORS لضمان قبول الطلبات من الواجهة (سواء محلياً أو بعد رفعها على Netlify)
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -18,7 +18,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// مسار الترحيب والفحص للتأكد من عمل السيرفر
+// مسار الفحص والتحقق
 app.get('/', (req, res) => {
     res.send('Discord Protocol Hub Server is Alive & Running 24/7!');
 });
@@ -27,8 +27,8 @@ app.listen(port, () => {
     console.log(`🌐 Server is running on port ${port}`);
 });
 
-// آلية الحفاظ على استيقاظ السيرفر تلقائياً كل 10 دقائق لمنع النوم على Render
-const RENDER_URL = 'https://discord-hub-px48.onrender.com'; // رابط سيرفرك
+// آلية الاستيقاظ 24/7 لمنع نوم السيرفر على Render
+const RENDER_URL = 'https://discord-hub-px48.onrender.com'; //
 
 setInterval(() => {
     https.get(RENDER_URL, (res) => {
@@ -38,9 +38,25 @@ setInterval(() => {
     });
 }, 10 * 60 * 1000);
 
-const activeClients = new Map();
+// خريطة ذكية لتخزين عملاء الديسكورد بحيث يكون لكل توكن جلسة معزولة تماماً عن البقية
+const sessions = new Map();
 
-// بروتوكول تشغيل الاتصال الصوتي (AFK Voice) بالطريقة المباشرة عبر بوابة ديسكورد
+// دالة مساعدة للحصول على أو إنشاء عميل آمن لكل حساب على حدة
+async function getOrCreateClient(token) {
+    if (sessions.has(token)) {
+        const existingClient = sessions.get(token);
+        if (existingClient.isReady()) {
+            return existingClient;
+        }
+    }
+
+    const client = new Client({ checkUpdate: false });
+    await client.login(token);
+    sessions.set(token, client);
+    return client;
+}
+
+// بروتوكول الفويس (مع عزل التداخل تماماً لكل حساب)
 app.post('/api/start-voice', async (req, res) => {
     const { token, guildId, channelId, mute, deaf, video, duration } = req.body;
     if (!token || !guildId || !channelId) {
@@ -48,14 +64,9 @@ app.post('/api/start-voice', async (req, res) => {
     }
 
     try {
-        let client = activeClients.get(token);
-        if (!client) {
-            client = new Client({ checkUpdate: false });
-            await client.login(token);
-            activeClients.set(token, client);
-        }
+        const client = await getOrCreateClient(token);
 
-        // إرسال طلب الاتصال الصوتي عبر الـ WebSocket Gateway مباشرة
+        // إرسال أمر الاتصال عبر الشارد الخاص بهذا الحساب فقط دون غيره
         if (client.ws && client.ws.shards) {
             const shard = client.ws.shards.first();
             if (shard) {
@@ -86,13 +97,13 @@ app.post('/api/start-voice', async (req, res) => {
             }, parseInt(duration) * 60 * 1000);
         }
 
-        res.json({ success: true, message: 'Voice connected successfully!' });
+        res.json({ success: true, message: 'Voice connected securely and isolated!' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 });
 
-// بروتوكول إرسال الرسائل النصية المتقدمة
+// بروتوكول الرسائل النصية (مستقل لكل حساب)
 app.post('/api/send-text', async (req, res) => {
     const { token, channelId, content, count, interval } = req.body;
     if (!token || !channelId || !content) {
@@ -100,13 +111,7 @@ app.post('/api/send-text', async (req, res) => {
     }
 
     try {
-        let client = activeClients.get(token);
-        if (!client) {
-            client = new Client({ checkUpdate: false });
-            await client.login(token);
-            activeClients.set(token, client);
-        }
-
+        const client = await getOrCreateClient(token);
         const channel = await client.channels.fetch(channelId);
         let sent = 0;
         
@@ -121,7 +126,7 @@ app.post('/api/send-text', async (req, res) => {
             } catch (e) {}
         }, interval * 1000);
 
-        res.json({ success: true, message: 'Text protocol started!' });
+        res.json({ success: true, message: 'Text protocol started safely!' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
