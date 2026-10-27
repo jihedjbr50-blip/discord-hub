@@ -1,0 +1,14 @@
+{
+  "name": "discord-hub-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js-selfbot-v13": "^14.3.0",
+    "express": "^4.19.2",
+    "ws": "^8.16.0"
+  }
+}
